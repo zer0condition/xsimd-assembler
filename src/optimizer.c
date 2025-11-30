@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// uhh not too safe
+// uhh not too ready
 
 typedef struct {
     pva_opcode_t op;
