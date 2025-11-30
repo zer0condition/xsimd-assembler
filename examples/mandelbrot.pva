@@ -1,0 +1,37 @@
+# load inputs
+vload r0, [input_re]
+vload r1, [input_im]
+
+# zero initialize iter counter and temp registers
+vzero r2
+vzero r3
+
+# load constants into registers
+vload r10, [max_iter]
+vload r11, [escape_limit]
+vload r12, [c_re]
+vload r13, [c_im]
+vload r14, [one]        #  lel
+
+# iter 1
+vlt r4, r2, r10          # r4 = (r2 < max_iter)
+vmul r5, r0, r0
+vmul r6, r1, r1
+
+# iter 2
+vadd r7, r5, r6          # |z|² = re² + im²
+vlt r8, r7, r11          # r8 = (|z|² < escape_limit)
+
+# iter 3
+vmul r9, r0, r1
+vadd r9, r9, r9          # 2 * re * im
+
+# iter 4 - update re and im
+vadd r0, r5, r12         # re_new = re² + c_re
+vadd r1, r9, r13         # im_new = 2*re*im + c_im
+
+# inc iter counter 
+vadd r2, r2, r14
+
+# store iter count
+vstore r2, [output]
