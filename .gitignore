@@ -1,4 +1,8 @@
 *.o
 *.bin
+*.tar.gz
+
+xsimd-asm
+tests/test_runner
 
 .vscode/

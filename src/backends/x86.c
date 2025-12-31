@@ -6,7 +6,7 @@
 #define MAX_REGS_SSE 16
 #define MAX_REGS_AVX2 16
 #define MAX_REGS_AVX512 32
-#define FULL_MASK 0xFFFF
+#define FULL_MASK 0xFF  // 8-bit mask for AVX-512
 
 /*
  * PVA Calling Convention for x86-64 (System V AMD64 ABI):
@@ -47,7 +47,7 @@ static void write_bytes(uint8_t** buf, const uint8_t* data, size_t len) {
 }
 
 // emit EVEX prefix for AVX512 instructions with register bits and mask
-static void emit_evex_prefix(uint8_t** pbuf, uint8_t p0, uint8_t p1, uint8_t p2,
+static void emit_evex_prefix(uint8_t** pbuf, uint8_t p0, uint8_t p1,
                              uint8_t r, uint8_t x, uint8_t b, uint8_t r2,
                              uint8_t mask, uint8_t zeroing, uint8_t vector_length) {
     uint8_t evex[4];
@@ -158,31 +158,6 @@ static void emit_avx2_66_0f(uint8_t** pbuf, uint8_t opcode, uint8_t dst, uint8_t
     write_bytes(pbuf, &modrm, 1);
 }
 
-static void emit_sse_addps(uint8_t** pbuf) {
-    uint8_t instr[3] = {0x0F, 0x58, 0xC1};
-    write_bytes(pbuf, instr, 3);
-}
-
-static void emit_sse_subps(uint8_t** pbuf) {
-    uint8_t instr[3] = {0x0F, 0x5C, 0xC1};
-    write_bytes(pbuf, instr, 3);
-}
-
-static void emit_sse_mulps(uint8_t** pbuf) {
-    uint8_t instr[3] = {0x0F, 0x59, 0xC1};
-    write_bytes(pbuf, instr, 3);
-}
-
-static void emit_sse_divps(uint8_t** pbuf) {
-    uint8_t instr[3] = {0x0F, 0x5E, 0xC1};
-    write_bytes(pbuf, instr, 3);
-}
-
-static void emit_sse_setzero(uint8_t** pbuf) {
-    uint8_t instr[3] = {0x0F, 0x57, 0xC0};
-    write_bytes(pbuf, instr, 3);
-}
-
 static void emit_avx512_instr(uint8_t** pbuf, uint8_t opcode,
                               uint8_t dst, uint8_t src1, uint8_t src2,
                               uint8_t mask) {
@@ -194,7 +169,7 @@ static void emit_avx512_instr(uint8_t** pbuf, uint8_t opcode,
     uint8_t vector_length = 2; 
     uint8_t zeroing = 0;      
 
-    emit_evex_prefix(pbuf, 0x7D, 0x48, opcode, r, x, b, r2, mask, zeroing, vector_length);
+    emit_evex_prefix(pbuf, 0x7D, 0x48, r, x, b, r2, mask, zeroing, vector_length);
     write_bytes(pbuf, &opcode, 1);
     emit_modrm(pbuf, dst & 7, src2 & 7);
 }
@@ -209,7 +184,7 @@ static void emit_avx512_load(uint8_t** pbuf, uint8_t dst, uint8_t base_reg, uint
     uint8_t vector_length = 2;
     uint8_t zeroing = 0;
 
-    emit_evex_prefix(pbuf, 0x7D, 0x48, 0x10, r, x, b, r2, mask, zeroing, vector_length);
+    emit_evex_prefix(pbuf, 0x7D, 0x48, r, x, b, r2, mask, zeroing, vector_length);
 
     uint8_t opcode = 0x10;
     write_bytes(pbuf, &opcode, 1);
@@ -227,7 +202,7 @@ static void emit_avx512_store(uint8_t** pbuf, uint8_t src, uint8_t base_reg, uin
     uint8_t vector_length = 2;
     uint8_t zeroing = 0;
 
-    emit_evex_prefix(pbuf, 0x7D, 0x48, 0x11, r, x, b, r2, mask, zeroing, vector_length);
+    emit_evex_prefix(pbuf, 0x7D, 0x48, r, x, b, r2, mask, zeroing, vector_length);
 
     uint8_t opcode = 0x11;
     write_bytes(pbuf, &opcode, 1);
@@ -254,18 +229,6 @@ static void emit_epilogue(uint8_t** pbuf) {
         0xc3                    // ret
     };
     write_bytes(pbuf, epilogue, sizeof(epilogue));
-}
-
-// Helper for SSE two-operand instructions
-static void emit_sse_unary(uint8_t** pbuf, uint8_t op1, uint8_t op2, uint8_t dst, uint8_t src) {
-    uint8_t modrm = 0xC0 | ((dst & 0x7) << 3) | (src & 0x7);
-    uint8_t instr[3] = {0x0F, op1, modrm};
-    if (op2 != 0) {
-        uint8_t instr4[4] = {0x0F, op1, op2, modrm};
-        write_bytes(pbuf, instr4, 4);
-    } else {
-        write_bytes(pbuf, instr, 3);
-    }
 }
 
 // Helper for SSE binary ops with register encoding
@@ -1205,7 +1168,6 @@ size_t pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                 } else if (mod->vec_width_bytes == 32) {
                     // vmovaps ymm, [gpr] - VEX encoded
                     // VEX.256.0F.WIG 28 /r
-                    uint8_t rex_needed = (xmm_dst >= 8) || (base_gpr >= 8);
                     uint8_t vex_r = (xmm_dst >= 8) ? 0 : 1;
                     uint8_t vex_b = (base_gpr >= 8) ? 0 : 1;
                     
@@ -1231,7 +1193,7 @@ size_t pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                             uint8_t sib = 0x24;  // scale=0, index=rsp(none), base=rsp
                             write_bytes(&ptr, &sib, 1);
                         }
-                    } else if (instr->imm >= -128 && instr->imm < 128) {
+                    } else if ((int32_t)instr->imm >= -128 && (int32_t)instr->imm < 128) {
                         // 8-bit signed displacement
                         modrm = 0x40 | ((xmm_dst & 7) << 3) | (base_gpr & 7);
                         write_bytes(&ptr, &modrm, 1);
@@ -1271,7 +1233,7 @@ size_t pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                             uint8_t sib = 0x24;
                             write_bytes(&ptr, &sib, 1);
                         }
-                    } else if (instr->imm >= -128 && instr->imm < 128) {
+                    } else if ((int32_t)instr->imm >= -128 && (int32_t)instr->imm < 128) {
                         modrm = 0x40 | ((xmm_dst & 7) << 3) | (base_gpr & 7);
                         write_bytes(&ptr, &modrm, 1);
                         if ((base_gpr & 7) == 4) {
@@ -1324,7 +1286,7 @@ size_t pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                             uint8_t sib = 0x24;
                             write_bytes(&ptr, &sib, 1);
                         }
-                    } else if (instr->imm >= -128 && instr->imm < 128) {
+                    } else if ((int32_t)instr->imm >= -128 && (int32_t)instr->imm < 128) {
                         // 8-bit displacement (signed)
                         modrm = 0x40 | ((xmm_src & 7) << 3) | (base_gpr & 7);
                         write_bytes(&ptr, &modrm, 1);
@@ -1363,7 +1325,7 @@ size_t pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                             uint8_t sib = 0x24;
                             write_bytes(&ptr, &sib, 1);
                         }
-                    } else if (instr->imm >= -128 && instr->imm < 128) {
+                    } else if ((int32_t)instr->imm >= -128 && (int32_t)instr->imm < 128) {
                         modrm = 0x40 | ((xmm_src & 7) << 3) | (base_gpr & 7);
                         write_bytes(&ptr, &modrm, 1);
                         if ((base_gpr & 7) == 4) {
