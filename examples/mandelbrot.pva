@@ -1,3 +1,6 @@
+; mandelbrot.pva - Mandelbrot set computation
+; xsimd-asm example program
+
 # load inputs
 vload r0, [input_re]
 vload r1, [input_im]

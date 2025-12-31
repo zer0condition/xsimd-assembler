@@ -5,12 +5,13 @@
 
 int main(int argc, char** argv) {
     if (argc < 4 || strcmp(argv[2], "-o") != 0) {
+        fprintf(stderr, "xsimd-asm - cross-platform SIMD assembler\n\n");
         fprintf(stderr, "usage: %s input.pva -o output.bin\n", argv[0]);
-        fprintf(stderr, "example: %s mandelbrot.pva -o mandelbrot.bin\n", argv[0]);
+        fprintf(stderr, "example: %s examples/mandelbrot.pva -o mandelbrot.bin\n", argv[0]);
         return 1;
     }
 
-    printf("[parser] parsing: %s\n", argv[1]);
+    printf("[xsimd-asm] parsing: %s\n", argv[1]);
 
     // parse source file
     pva_module_t* mod = pva_parse_file(argv[1]);
@@ -19,7 +20,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    printf("[parser]    parsed %zu instructions\n\n", mod->size);
+    printf("[xsimd-asm] parsed %zu instructions\n\n", mod->size);
 
     // check support
     int vec_width = 0;
@@ -67,16 +68,17 @@ int main(int argc, char** argv) {
     // gen binary output
     printf("\n");
     uint8_t buffer[8192] = {0};
+    size_t code_size = 0;
 
     if (mod->arch == PVA_ARCH_X86_AVX512 || 
         mod->arch == PVA_ARCH_X86_AVX2 || 
         mod->arch == PVA_ARCH_X86_SSE) {
-        pva_emit_x86(mod, buffer);
+        code_size = pva_emit_x86(mod, buffer);
     } else if (mod->arch == PVA_ARCH_ARM_SVE || 
                mod->arch == PVA_ARCH_ARM_NEON) {
-        pva_emit_arm(mod, buffer);
+        code_size = pva_emit_arm(mod, buffer);
     } else if (mod->arch == PVA_ARCH_RISCV_RVV) {
-        pva_emit_riscv(mod, buffer);
+        code_size = pva_emit_riscv(mod, buffer);
     } else {
         fprintf(stderr, "err: unsupported or unknown architecture\n");
         pva_free(mod);
@@ -91,12 +93,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Note: buffer contains generated code, actual size depends on backend
-    // For now, write the full buffer - backends should report actual size
-    size_t written = fwrite(buffer, 1, sizeof(buffer), outfp);
+    size_t written = fwrite(buffer, 1, code_size, outfp);
     fclose(outfp);
 
-    printf("\ncompiled successfully!\n");
+    printf("\n[xsimd-asm] assembled successfully!\n");
     printf("    output: %s (%zu bytes)\n", argv[3], written);
     printf("    instructions: %zu\n", mod->size);
 

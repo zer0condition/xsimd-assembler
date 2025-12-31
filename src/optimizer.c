@@ -43,8 +43,8 @@ static int find_fusible_patterns(pva_module_t* mod, FusiblePattern* patterns, in
 }
 
 static void eliminate_dead_code(pva_module_t* mod) {
-    // track which registers are actually used
-    int reg_used[16] = {0};
+    // track which registers are actually used (32 registers supported)
+    int reg_used[32] = {0};
     
     // mark registers used in output operations
     for (size_t i = 0; i < mod->size; i++) {
@@ -59,14 +59,14 @@ static void eliminate_dead_code(pva_module_t* mod) {
         changed = 0;
         for (int i = (int)mod->size - 1; i >= 0; i--) {
             if (reg_used[mod->code[i].dst]) {
-                // If destination is used, mark sources as used
-                if (mod->code[i].src1 < 16) {
+                // if destination is used, mark sources as used
+                if (mod->code[i].src1 < 32) {
                     if (!reg_used[mod->code[i].src1]) {
                         reg_used[mod->code[i].src1] = 1;
                         changed = 1;
                     }
                 }
-                if (mod->code[i].src2 < 16) {
+                if (mod->code[i].src2 < 32) {
                     if (!reg_used[mod->code[i].src2]) {
                         reg_used[mod->code[i].src2] = 1;
                         changed = 1;
@@ -85,7 +85,7 @@ static void eliminate_dead_code(pva_module_t* mod) {
         
         // STORE and LOAD always keep (side effects)
         if (mod->code[i].op != PVA_STORE_F32 && mod->code[i].op != PVA_LOAD_F32) {
-            if (!reg_used[mod->code[i].dst]) {
+            if (mod->code[i].dst < 32 && !reg_used[mod->code[i].dst]) {
                 is_dead = 1;
                 removed++;
             }
@@ -110,7 +110,7 @@ static size_t hash_instr_key(const instr_key_t *key) {
     return (key->op * 31 + key->src1 * 17 + key->src2) % HASH_TABLE_SIZE;
 }
 
-void combine_commutative_ops(pva_module_t* mod) {
+static void combine_commutative_ops(pva_module_t* mod) {
     int combined = 0;
     pva_instr_t *hash_table[HASH_TABLE_SIZE];
     memset(hash_table, 0, sizeof(hash_table));
@@ -159,7 +159,7 @@ void combine_commutative_ops(pva_module_t* mod) {
     }
 }
 
-int calculate_instruction_level_parallelism(pva_module_t* mod) {
+static int calculate_instruction_level_parallelism(pva_module_t* mod) {
     int max_chain = 0;
     int current_chain = 1;
     int last_dst = -1;
@@ -186,7 +186,7 @@ int calculate_instruction_level_parallelism(pva_module_t* mod) {
     return max_chain;
 }
 
-void strength_reduce(pva_module_t* mod) {
+static void strength_reduce(pva_module_t* mod) {
     int reductions = 0;
 
     for (size_t i = 0; i < mod->size; i++) {

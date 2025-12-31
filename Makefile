@@ -12,7 +12,7 @@ SRCS = src/main.c \
        src/backends/riscv.c
 
 OBJS = $(SRCS:.c=.o)
-TARGET = pva
+TARGET = xsimd-asm
 
 # Default target
 .PHONY: all clean run help
@@ -21,39 +21,40 @@ all: $(TARGET)
 
 # Link executable
 $(TARGET): $(OBJS)
-	@echo "[Link] Building PVA compiler..."
+	@echo "[link] building xsimd-asm..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "[Success] Executable: $(TARGET)"
+	@echo "[success] executable: $(TARGET)"
 
 # Compile source files
 %.o: %.c
-	@echo "[Compile] $<"
+	@echo "[compile] $<"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Run example
 run: $(TARGET)
-	@echo "[Run] Compiling mandelbrot.pva..."
+	@echo "[run] assembling mandelbrot.pva..."
 	./$(TARGET) examples/mandelbrot.pva -o mandelbrot.bin
-	@echo "[Done] Output: mandelbrot.bin"
+	@echo "[done] output: mandelbrot.bin"
 
 # Clean build artifacts
 clean:
-	@echo "[Clean] Removing objects and executable..."
+	@echo "[clean] removing objects and executable..."
 	rm -f $(OBJS) $(TARGET)
-	@echo "[Done]"
+	@echo "[done]"
 
 help:
-	@echo "PVA Compiler - Portable Vector Assembly"
+	@echo "xsimd-asm - Cross-Platform SIMD Assembler"
+	@echo ""
 	@echo "Usage:"
-	@echo "  make          - Build the compiler"
+	@echo "  make          - Build the assembler"
 	@echo "  make run      - Build and run example"
 	@echo "  make clean    - Remove build artifacts"
 	@echo "  make help     - Show this help message"
 	@echo ""
-	@echo "Compiler usage:"
-	@echo "  ./pva input.pva -o output.bin"
+	@echo "Assembler usage:"
+	@echo "  ./xsimd-asm input.pva -o output.bin"
 	@echo ""
 	@echo "Supported architectures:"
-	@echo "  - x86-64: AVX512, AVX2, SSE4.2"
+	@echo "  - x86-64: AVX-512, AVX2, SSE4.2"
 	@echo "  - ARM64: SVE, NEON"
 	@echo "  - RISC-V: RVV"

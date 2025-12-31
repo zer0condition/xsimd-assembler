@@ -1,0 +1,104 @@
+; vector_math.pva - Vector math operations
+; xsimd-asm example program
+;
+; Comprehensive example demonstrating PVA vector operations
+; This example performs common vector math computations
+
+; ========================================
+; Vector Initialization
+; ========================================
+
+    vzero r0                ; r0 = [0, 0, 0, 0]
+    vone r1                 ; r1 = all bits set (for masks)
+
+; ========================================
+; Memory Operations - Load data
+; ========================================
+
+    vload.f32 r2, [r10]     ; Load 4 floats from ptr r10
+    vload.f32 r3, [r11]     ; Load 4 floats from ptr r11
+    vload.f32 r4, [r10+#16] ; Load with offset
+
+; ========================================
+; Basic Arithmetic F32
+; ========================================
+
+    vadd.f32 r5, r2, r3     ; r5 = r2 + r3
+    vsub.f32 r6, r2, r3     ; r6 = r2 - r3
+    vmul.f32 r7, r2, r3     ; r7 = r2 * r3
+    vdiv.f32 r8, r2, r3     ; r8 = r2 / r3
+
+; ========================================
+; Math Functions
+; ========================================
+
+    vsqrt r9, r7            ; r9 = sqrt(r7)
+    vabs r10, r6            ; r10 = |r6|
+    vneg r11, r5            ; r11 = -r5
+
+; ========================================
+; Min/Max Operations
+; ========================================
+
+    vmin r12, r2, r3        ; r12 = min(r2, r3) element-wise
+    vmax r13, r2, r3        ; r13 = max(r2, r3) element-wise
+
+; ========================================
+; Fused Multiply-Add
+; ========================================
+
+    vfma r14, r2, r3, r4    ; r14 = r2 * r3 + r4
+
+; ========================================
+; Comparison Operations
+; ========================================
+
+    vcmplt r15, r2, r3      ; r15 = mask where r2 < r3
+    vcmple r16, r2, r3      ; r16 = mask where r2 <= r3
+    vcmpgt r17, r2, r3      ; r17 = mask where r2 > r3
+    vcmpge r18, r2, r3      ; r18 = mask where r2 >= r3
+    vcmpeq r19, r2, r3      ; r19 = mask where r2 == r3
+
+; ========================================
+; Bitwise Operations
+; ========================================
+
+    vand r20, r15, r17      ; r20 = r15 & r17 (combine masks)
+    vor r21, r15, r16       ; r21 = r15 | r16
+    vxor r22, r15, r17      ; r22 = r15 ^ r17
+    vnot r23, r15           ; r23 = ~r15
+
+; ========================================
+; Shift Operations (Integer)
+; ========================================
+
+    vshl r24, r20, #2       ; r24 = r20 << 2
+    vshr r25, r20, #2       ; r25 = r20 >> 2 (logical)
+
+; ========================================
+; Data Movement
+; ========================================
+
+    vmov r26, r5            ; r26 = r5 (copy)
+    vbroadcast r27, r2      ; r27 = broadcast first element of r2
+
+; ========================================
+; Type Conversion
+; ========================================
+
+    vcvt.f32.i32 r28, r20   ; r28 = convert int32 to float32
+    vcvt.i32.f32 r29, r5    ; r29 = convert float32 to int32
+
+; ========================================
+; Store Results
+; ========================================
+
+    vstore.f32 [r12], r5    ; Store result to output
+    vstore.f32 [r12+#16], r9  ; Store sqrt result
+    vstore.f32 [r12+#32], r14 ; Store FMA result
+
+; ========================================
+; Return
+; ========================================
+
+    ret
