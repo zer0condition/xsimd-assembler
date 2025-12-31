@@ -12,9 +12,11 @@ void pva_emit_riscv(pva_module_t* mod, uint8_t* buffer) {
     printf("[codegen] target vector width: %d bytes\n", mod->vec_width_bytes);
 
     // prologue
-    // addi sp, sp, -16
+    // addi sp, sp, -16: opcode=0x13, rd=sp(2), rs1=sp(2), imm=-16
+    // Encoding: imm[11:0] | rs1 | funct3 | rd | opcode = 0xff010113
     *ptr++ = 0x13; *ptr++ = 0x01; *ptr++ = 0x01; *ptr++ = 0xff;
-    // sd ra, 8(sp)
+    // sd ra, 8(sp): stores ra to [sp+8]
+    // Encoding: imm[11:5] | rs2 | rs1 | funct3 | imm[4:0] | opcode = 0x00113423
     *ptr++ = 0x23; *ptr++ = 0x34; *ptr++ = 0x11; *ptr++ = 0x00;
 
     // init vector length (setvl instruction)
@@ -183,12 +185,15 @@ void pva_emit_riscv(pva_module_t* mod, uint8_t* buffer) {
     }
 
     // epilogue
-    // ld ra, 8(sp)
+    // ld ra, 8(sp): loads ra from [sp+8]
+    // Encoding: 0x00813083
     *ptr++ = 0x83; *ptr++ = 0x30; *ptr++ = 0x81; *ptr++ = 0x00;
-    // addi sp, sp, 16
+    // addi sp, sp, 16: restores stack pointer
+    // Encoding: 0x01010113
     *ptr++ = 0x13; *ptr++ = 0x01; *ptr++ = 0x01; *ptr++ = 0x01;
-    // jalr x0, x1, 0 (ret)
+    // ret (jalr x0, ra, 0): return from function
+    // Encoding: 0x00008067 (ra is x1)
     *ptr++ = 0x67; *ptr++ = 0x80; *ptr++ = 0x00; *ptr++ = 0x00;
 
-    printf("[codegen] generated %ld bytes of RISC-V RVV code\n", ptr - buffer);
+    printf("[codegen] generated %td bytes of RISC-V RVV code\n", ptr - buffer);
 }

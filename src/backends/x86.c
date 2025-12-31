@@ -196,7 +196,7 @@ void pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
                 } else if (mod->vec_width_bytes == 32) {
                     emit_avx2_instr(&ptr, 0x5E, instr->dst, instr->src1, instr->src2);
                 } else {
-                    // SSE divps - you can implement similarly
+                    emit_sse_divps(&ptr);
                 }
                 break;
 
@@ -242,5 +242,5 @@ void pva_emit_x86(pva_module_t* mod, uint8_t* buffer) {
 
     emit_epilogue(&ptr);
 
-    printf("[codegen] generated %ld bytes of code\n", ptr - buffer);
+    printf("[codegen] generated %td bytes of code\n", ptr - buffer);
 }

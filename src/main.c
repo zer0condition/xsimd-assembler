@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    printf("parser]     parsed %zu instructions\n\n", mod->size);
+    printf("[parser]    parsed %zu instructions\n\n", mod->size);
 
     // check support
     int vec_width = 0;
@@ -91,6 +91,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Note: buffer contains generated code, actual size depends on backend
+    // For now, write the full buffer - backends should report actual size
     size_t written = fwrite(buffer, 1, sizeof(buffer), outfp);
     fclose(outfp);
 

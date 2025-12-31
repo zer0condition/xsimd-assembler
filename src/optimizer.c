@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 
-// uhh not too ready
-
 typedef struct {
     pva_opcode_t op;
     uint8_t src1;
@@ -19,7 +17,9 @@ typedef struct {
 static int find_fusible_patterns(pva_module_t* mod, FusiblePattern* patterns, int max_patterns) {
     int count = 0;
     
-    for (size_t i = 0; i < mod->size - 2 && count < max_patterns; i++) {
+    if (mod->size < 3) return 0;  // need at least 3 instructions for LOAD->COMPUTE->STORE pattern
+    
+    for (size_t i = 0; i + 2 < mod->size && count < max_patterns; i++) {
         // pattern: LOAD -> COMPUTE -> STORE
         if (mod->code[i].op == PVA_LOAD_F32 &&
             (mod->code[i+1].op >= PVA_ADD_F32 && mod->code[i+1].op <= PVA_DIV_F32) &&
@@ -76,7 +76,7 @@ static void eliminate_dead_code(pva_module_t* mod) {
         }
     }
     
-    // remopve instructions whose destinations are never used
+    // remove instructions whose destinations are never used
     size_t write_idx = 0;
     int removed = 0;
     
@@ -130,10 +130,12 @@ void combine_commutative_ops(pva_module_t* mod) {
         pva_instr_t *found = NULL;
 
         if (hash_table[h1] &&
+            hash_table[h1]->op == instr->op &&  // must match opcode
             ((hash_table[h1]->src1 == instr->src1 && hash_table[h1]->src2 == instr->src2) ||
              (hash_table[h1]->src1 == instr->src2 && hash_table[h1]->src2 == instr->src1)) ) {
             found = hash_table[h1];
         } else if (hash_table[h2] &&
+            hash_table[h2]->op == instr->op &&  // must match opcode
             ((hash_table[h2]->src1 == instr->src1 && hash_table[h2]->src2 == instr->src2) ||
              (hash_table[h2]->src1 == instr->src2 && hash_table[h2]->src2 == instr->src1)) ) {
             found = hash_table[h2];
@@ -190,7 +192,7 @@ void strength_reduce(pva_module_t* mod) {
     for (size_t i = 0; i < mod->size; i++) {
         pva_instr_t *instr = &mod->code[i];
         
-        // skull emoji
+        // multiply by 2 can be replaced with add
         if (instr->op == PVA_MUL_F32 && instr->imm == 2) {
             // replace vmul dst, src, #2 with vadd dst, src, src
             instr->op = PVA_ADD_F32;

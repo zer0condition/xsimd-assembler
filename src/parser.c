@@ -165,7 +165,7 @@ static pva_instr_t parse_instruction_line(pva_lexer_t *lex, int line_num) {
 
         case PVA_LOOP_BEGIN:
         case PVA_LOOP_END:
-            // :skull: enjoy
+            // loop control - no operands needed
             break;
 
         default:

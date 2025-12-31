@@ -41,11 +41,11 @@ void pva_emit_arm(pva_module_t* mod, uint8_t* buffer) {
 
             case PVA_SUB_F32: {
                 // fsub v<dst>.4s, v<src1>.4s, v<src2>.4s
-                uint32_t opcode = 0x4e20d400;  // fsub encoding differs
+                // ARM NEON fsub encoding: 0x4EA0D400
+                uint32_t opcode = 0x4ea0d400;  // fsub base (bit 23 set for subtraction)
                 opcode |= ((instr->dst & 0x1f) << 0);
                 opcode |= ((instr->src1 & 0x1f) << 5);
                 opcode |= ((instr->src2 & 0x1f) << 16);
-                opcode ^= 0x40;  // toggle subtraction bit
                 
                 *ptr++ = (opcode >> 0) & 0xff;
                 *ptr++ = (opcode >> 8) & 0xff;
@@ -140,12 +140,12 @@ void pva_emit_arm(pva_module_t* mod, uint8_t* buffer) {
     }
 
     // ABI epilogue
-    // add sp, sp, #0x100
-    *ptr++ = 0xff; *ptr++ = 0x83; *ptr++ = 0x00; *ptr++ = 0x91;
+    // add sp, sp, #0x100 (deallocate stack space - same immediate as prologue sub)
+    *ptr++ = 0xff; *ptr++ = 0x83; *ptr++ = 0x04; *ptr++ = 0x91;
     // ldp fp, lr, [sp], #16
     *ptr++ = 0xfd; *ptr++ = 0x7b; *ptr++ = 0xc1; *ptr++ = 0xa8;
-    // ret (mov lr to pc)
+    // ret (br lr)
     *ptr++ = 0xc0; *ptr++ = 0x03; *ptr++ = 0x5f; *ptr++ = 0xd6;
 
-    printf("[codegen] generated %ld bytes of ARM code\n", ptr - buffer);
+    printf("[codegen] generated %td bytes of ARM code\n", ptr - buffer);
 }
