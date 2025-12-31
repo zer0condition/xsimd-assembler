@@ -37,7 +37,8 @@ static char* lexer_read_token(pva_lexer_t *lex, char *buffer, int max_len) {
            lex->input[lex->pos] != ',' &&
            lex->input[lex->pos] != '[' &&
            lex->input[lex->pos] != ']' &&
-           lex->input[lex->pos] != '#') {
+           lex->input[lex->pos] != '#' &&
+           lex->input[lex->pos] != ';') {
         buffer[i++] = lex->input[lex->pos++];
         lex->col++;
     }
@@ -597,8 +598,8 @@ pva_module_t* pva_parse_file(const char* filename) {
     while (lex.input[lex.pos]) {
         lexer_skip_whitespace(&lex);
         
-        // skip comments
-        if (lex.input[lex.pos] == '#') {
+        // skip comments (both # and ; style)
+        if (lex.input[lex.pos] == '#' || lex.input[lex.pos] == ';') {
             while (lex.input[lex.pos] && lex.input[lex.pos] != '\n') {
                 lex.pos++;
             }
