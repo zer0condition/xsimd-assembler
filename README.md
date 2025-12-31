@@ -144,6 +144,16 @@ ret
 - No gather/scatter
 - No predicated/masked operations
 
+## Contributing
+
+Help wanted:
+
+- **ARM testing** - Run the test suite on ARM64 hardware with NEON
+- **RISC-V testing** - Run tests on RVV-capable hardware
+- **AVX-512 testing** - Verify on Skylake-X or newer
+- **New instructions** - Gather/scatter, masked ops, more horizontal reductions
+- **Bug fixes** - File issues or send PRs
+
 ## License
 
 MIT
