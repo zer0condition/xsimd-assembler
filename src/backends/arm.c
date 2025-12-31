@@ -2,6 +2,34 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * PVA Calling Convention for ARM64 (AAPCS64):
+ * 
+ * Pointer registers (for memory operations):
+ *   PVA r10 -> ARM x0 (1st argument)
+ *   PVA r11 -> ARM x1 (2nd argument)  
+ *   PVA r12 -> ARM x2 (3rd argument)
+ *   PVA r13 -> ARM x3 (4th argument)
+ *   PVA r14 -> ARM x4 (5th argument)
+ *   PVA r15 -> ARM x5 (6th argument)
+ *
+ * Vector registers:
+ *   PVA r0-r31 -> NEON v0-v31
+ */
+
+// Map PVA pointer register to ARM GPR encoding
+static uint8_t pva_ptr_to_gpr(uint8_t pva_reg) {
+    switch (pva_reg) {
+        case 10: return 0;   // r10 -> x0
+        case 11: return 1;   // r11 -> x1
+        case 12: return 2;   // r12 -> x2
+        case 13: return 3;   // r13 -> x3
+        case 14: return 4;   // r14 -> x4
+        case 15: return 5;   // r15 -> x5
+        default: return 0;   // default to x0
+    }
+}
+
 // helper to emit a 32-bit ARM instruction in little-endian
 static void emit_arm_instr(uint8_t** ptr, uint32_t opcode) {
     *(*ptr)++ = (opcode >> 0) & 0xff;
@@ -130,7 +158,11 @@ size_t pva_emit_arm(pva_module_t* mod, uint8_t* buffer) {
                 break;
 
             case PVA_FMA_F32:
-                // fmla v<dst>.4s, v<src1>.4s, v<src2>.4s (accumulate into dst)
+                // fma: dst = src1 * src2 + src3
+                // First copy src3 to dst, then fmla accumulates into dst
+                // mov v<dst>.16b, v<src3>.16b
+                emit_neon_f32_3op(&ptr, 0x4ea01c00, instr->dst, instr->src3, instr->src3);
+                // fmla v<dst>.4s, v<src1>.4s, v<src2>.4s (dst = dst + src1*src2)
                 emit_neon_f32_3op(&ptr, 0x4e20cc00, instr->dst, instr->src1, instr->src2);
                 break;
 
@@ -205,6 +237,126 @@ size_t pva_emit_arm(pva_module_t* mod, uint8_t* buffer) {
                 break;
             }
 
+            case PVA_SAR_I32: {
+                // sshr v<dst>.4s, v<src>.4s, #imm (arithmetic shift right)
+                uint32_t opcode = 0x4f200400 | (instr->dst & 0x1f) | ((instr->src1 & 0x1f) << 5) | (((32 - instr->imm) & 0x1f) << 16);
+                emit_arm_instr(&ptr, opcode);
+                break;
+            }
+
+            // ========== I16 ARITHMETIC ==========
+            case PVA_ADD_I16:
+                // add v<dst>.8h, v<src1>.8h, v<src2>.8h
+                emit_neon_f32_3op(&ptr, 0x4e608400, instr->dst, instr->src1, instr->src2);
+                break;
+
+            case PVA_SUB_I16:
+                // sub v<dst>.8h, v<src1>.8h, v<src2>.8h
+                emit_neon_f32_3op(&ptr, 0x6e608400, instr->dst, instr->src1, instr->src2);
+                break;
+
+            case PVA_MUL_I16:
+                // mul v<dst>.8h, v<src1>.8h, v<src2>.8h
+                emit_neon_f32_3op(&ptr, 0x4e609c00, instr->dst, instr->src1, instr->src2);
+                break;
+
+            // ========== ADDITIONAL MATH ==========
+            case PVA_SQRT_F64:
+                // fsqrt v<dst>.2d, v<src>.2d
+                emit_neon_f32_2op(&ptr, 0x6ee1f800, instr->dst, instr->src1);
+                break;
+
+            case PVA_ABS_I32:
+                // abs v<dst>.4s, v<src>.4s
+                emit_neon_f32_2op(&ptr, 0x4ea0b800, instr->dst, instr->src1);
+                break;
+
+            case PVA_NEG_I32:
+                // neg v<dst>.4s, v<src>.4s
+                emit_neon_f32_2op(&ptr, 0x6ea0b800, instr->dst, instr->src1);
+                break;
+
+            case PVA_FMA_F64:
+                // fma: dst = src1 * src2 + src3
+                // mov v<dst>.16b, v<src3>.16b
+                emit_neon_f32_3op(&ptr, 0x4ea01c00, instr->dst, instr->src3, instr->src3);
+                // fmla v<dst>.2d, v<src1>.2d, v<src2>.2d
+                emit_neon_f32_3op(&ptr, 0x4e60cc00, instr->dst, instr->src1, instr->src2);
+                break;
+
+            case PVA_MIN_I32:
+                // smin v<dst>.4s, v<src1>.4s, v<src2>.4s
+                emit_neon_f32_3op(&ptr, 0x4ea06c00, instr->dst, instr->src1, instr->src2);
+                break;
+
+            case PVA_MAX_I32:
+                // smax v<dst>.4s, v<src1>.4s, v<src2>.4s
+                emit_neon_f32_3op(&ptr, 0x4ea06400, instr->dst, instr->src1, instr->src2);
+                break;
+
+            // ========== HORIZONTAL REDUCTIONS ==========
+            case PVA_HADD_F32: {
+                // faddp v<dst>.4s, v<src>.4s, v<src>.4s (pairwise add, repeat for full reduction)
+                emit_neon_f32_3op(&ptr, 0x6e20d400, instr->dst, instr->src1, instr->src1);
+                emit_neon_f32_3op(&ptr, 0x6e20d400, instr->dst, instr->dst, instr->dst);
+                break;
+            }
+
+            case PVA_HMIN_F32:
+                // fminv s<dst>, v<src>.4s (horizontal min to scalar)
+                emit_neon_f32_2op(&ptr, 0x6eb0f800, instr->dst, instr->src1);
+                break;
+
+            case PVA_HMAX_F32:
+                // fmaxv s<dst>, v<src>.4s (horizontal max to scalar)
+                emit_neon_f32_2op(&ptr, 0x6e30f800, instr->dst, instr->src1);
+                break;
+
+            // ========== ADDITIONAL DATA MOVEMENT ==========
+            case PVA_BROADCAST_I32: {
+                // dup v<dst>.4s, v<src>.s[0]
+                uint32_t opcode = 0x4e040400 | (instr->dst & 0x1f) | ((instr->src1 & 0x1f) << 5);
+                emit_arm_instr(&ptr, opcode);
+                break;
+            }
+
+            case PVA_SET1_F32:
+            case PVA_SET1_I32: {
+                // For immediate values, we need to load from literal pool or use movi
+                // fmov v<dst>.4s, #imm (if representable) - simplified: use movi
+                uint32_t opcode = 0x4f000400 | (instr->dst & 0x1f);
+                // Encode immediate - this is simplified, real impl needs proper encoding
+                emit_arm_instr(&ptr, opcode);
+                break;
+            }
+
+            // ========== TYPE CONVERSIONS ==========
+            case PVA_CVT_F64_F32:
+                // fcvtl v<dst>.2d, v<src>.2s (widen f32 to f64)
+                emit_neon_f32_2op(&ptr, 0x4e617800, instr->dst, instr->src1);
+                break;
+
+            case PVA_CVT_F32_F64:
+                // fcvtn v<dst>.2s, v<src>.2d (narrow f64 to f32)
+                emit_neon_f32_2op(&ptr, 0x4e616800, instr->dst, instr->src1);
+                break;
+
+            // ========== I32 COMPARISONS ==========
+            case PVA_CMP_LT_I32:
+                // cmgt v<dst>.4s, v<src2>.4s, v<src1>.4s (swap for LT)
+                emit_neon_f32_3op(&ptr, 0x4ea03400, instr->dst, instr->src2, instr->src1);
+                break;
+
+            case PVA_CMP_GT_I32:
+                // cmgt v<dst>.4s, v<src1>.4s, v<src2>.4s
+                emit_neon_f32_3op(&ptr, 0x4ea03400, instr->dst, instr->src1, instr->src2);
+                break;
+
+            case PVA_CMP_EQ_I32:
+                // cmeq v<dst>.4s, v<src1>.4s, v<src2>.4s
+                emit_neon_f32_3op(&ptr, 0x6ea08c00, instr->dst, instr->src1, instr->src2);
+                break;
+
             // ========== DATA MOVEMENT ==========
             case PVA_MOV:
                 // mov v<dst>.16b, v<src>.16b (orr with itself)
@@ -233,24 +385,48 @@ size_t pva_emit_arm(pva_module_t* mod, uint8_t* buffer) {
             case PVA_LOAD_F32:
             case PVA_LOAD_F64:
             case PVA_LOAD_I32: {
-                // ldr q<dst>, [x<base>, #offset]
-                uint32_t opcode = 0x3dc00000;
-                opcode |= (instr->dst & 0x1f);
-                opcode |= ((instr->src1 & 0x1f) << 5);
-                opcode |= (((instr->imm >> 4) & 0xfff) << 10);  // scaled offset
-                emit_arm_instr(&ptr, opcode);
+                // Map PVA pointer register to ARM GPR
+                uint8_t base_gpr = pva_ptr_to_gpr(instr->src1);
+                uint8_t vec_dst = instr->dst & 0x1f;
+                
+                if (instr->imm == 0) {
+                    // ldr q<dst>, [x<base>]
+                    uint32_t opcode = 0x3dc00000;
+                    opcode |= vec_dst;
+                    opcode |= (base_gpr << 5);
+                    emit_arm_instr(&ptr, opcode);
+                } else {
+                    // ldr q<dst>, [x<base>, #offset]
+                    uint32_t opcode = 0x3dc00000;
+                    opcode |= vec_dst;
+                    opcode |= (base_gpr << 5);
+                    opcode |= (((instr->imm >> 4) & 0xfff) << 10);  // scaled offset for 128-bit
+                    emit_arm_instr(&ptr, opcode);
+                }
                 break;
             }
 
             case PVA_STORE_F32:
             case PVA_STORE_F64:
             case PVA_STORE_I32: {
-                // str q<src>, [x<base>, #offset]
-                uint32_t opcode = 0x3d800000;
-                opcode |= (instr->dst & 0x1f);
-                opcode |= ((instr->src1 & 0x1f) << 5);
-                opcode |= (((instr->imm >> 4) & 0xfff) << 10);
-                emit_arm_instr(&ptr, opcode);
+                // For store: instr->dst is base pointer, instr->src1 is vector source
+                uint8_t base_gpr = pva_ptr_to_gpr(instr->dst);
+                uint8_t vec_src = instr->src1 & 0x1f;
+                
+                if (instr->imm == 0) {
+                    // str q<src>, [x<base>]
+                    uint32_t opcode = 0x3d800000;
+                    opcode |= vec_src;
+                    opcode |= (base_gpr << 5);
+                    emit_arm_instr(&ptr, opcode);
+                } else {
+                    // str q<src>, [x<base>, #offset]
+                    uint32_t opcode = 0x3d800000;
+                    opcode |= vec_src;
+                    opcode |= (base_gpr << 5);
+                    opcode |= (((instr->imm >> 4) & 0xfff) << 10);
+                    emit_arm_instr(&ptr, opcode);
+                }
                 break;
             }
 

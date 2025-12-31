@@ -1,0 +1,237 @@
+; Comprehensive x86 Test - Tests ALL supported PVA instructions
+; Tests: arithmetic, math, comparisons, bitwise, conversions, memory, FMA
+; 
+; Mnemonics reference:
+;   F32 compare: vcmplt, vcmple, vcmpgt, vcmpge, vcmpeq, vcmpne
+;   I32 compare: vcmplt.i32, vcmpgt.i32, vcmpeq.i32
+;   Shifts: vshl, vshr, vsar (no .i32 suffix)
+;   Zero/One: vzero, vone
+;   Broadcast: vbroadcast (no .f32)
+;   Horiz: vhadd, vhmin, vhmax (no .f32)
+;   RSQRT/RCP: vrsqrt, vrcp (no .f32)
+;   NOP/RET: nop, ret (no v prefix)
+
+; Setup: r10=input, r11=output (set by test runner)
+
+; ===== F32 ARITHMETIC (offset 0) =====
+vload.f32 r0, [r10]           ; r0 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+vload.f32 r1, [r10+#32]       ; r1 = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+
+vadd.f32 r2, r0, r1           ; [1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0]
+vstore.f32 [r11], r2
+
+vsub.f32 r3, r0, r1           ; [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+vstore.f32 [r11+#32], r3
+
+vmul.f32 r4, r0, r1           ; [0.5, 2.0, 4.5, 8.0, 12.5, 18.0, 24.5, 32.0]
+vstore.f32 [r11+#64], r4
+
+vdiv.f32 r5, r0, r1           ; [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+vstore.f32 [r11+#96], r5
+
+; ===== F32 MATH FUNCTIONS (offset 128) =====
+vload.f32 r0, [r10+#64]       ; [4.0, 9.0, 16.0, 25.0, ...]
+
+vsqrt.f32 r2, r0              ; [2.0, 3.0, 4.0, 5.0, ...]
+vstore.f32 [r11+#128], r2
+
+vload.f32 r1, [r10+#32]       ; [0.5, 1.0, 1.5, 2.0, ...]
+vmin.f32 r3, r0, r1           ; element-wise min
+vstore.f32 [r11+#160], r3
+
+vmax.f32 r4, r0, r1           ; element-wise max
+vstore.f32 [r11+#192], r4
+
+vload.f32 r0, [r10+#96]       ; [-1.0, -2.0, 3.0, -4.0, ...]
+vabs.f32 r5, r0               ; [1.0, 2.0, 3.0, 4.0, ...]
+vstore.f32 [r11+#224], r5
+
+vload.f32 r0, [r10]           ; [1.0, 2.0, 3.0, 4.0, ...]
+vneg.f32 r6, r0               ; [-1.0, -2.0, -3.0, -4.0, ...]
+vstore.f32 [r11+#256], r6
+
+; ===== F32 COMPARISONS (offset 288) =====
+vload.f32 r0, [r10]           ; [1.0, 2.0, 3.0, 4.0, ...]
+vload.f32 r1, [r10+#32]       ; [0.5, 1.0, 1.5, 2.0, ...]
+
+vcmplt r2, r0, r1             ; r0 < r1 (all false)
+vstore.f32 [r11+#288], r2
+
+vcmpgt r3, r0, r1             ; r0 > r1 (all true)
+vstore.f32 [r11+#320], r3
+
+vmov r4, r0
+vcmpeq r5, r0, r4             ; r0 == r0 (all true)
+vstore.f32 [r11+#352], r5
+
+; ===== INTEGER OPERATIONS (offset 384) =====
+vload.f32 r0, [r10+#128]      ; integer data as f32 bits
+vload.f32 r1, [r10+#160]
+
+vadd.i32 r2, r0, r1
+vstore.f32 [r11+#384], r2
+
+vsub.i32 r3, r0, r1
+vstore.f32 [r11+#416], r3
+
+vmul.i32 r4, r0, r1
+vstore.f32 [r11+#448], r4
+
+; ===== BITWISE OPERATIONS (offset 480) =====
+vand.i32 r5, r0, r1
+vstore.f32 [r11+#480], r5
+
+vor.i32 r6, r0, r1
+vstore.f32 [r11+#512], r6
+
+vxor.i32 r7, r0, r1
+vstore.f32 [r11+#544], r7
+
+vnot.i32 r8, r0
+vstore.f32 [r11+#576], r8
+
+; ===== SHIFT OPERATIONS (offset 608) =====
+vload.f32 r0, [r10+#128]      ; reload integer data [10, 20, 30, 40, 50, 60, 70, 80]
+vload.f32 r1, [r10+#160]      ; [5, 10, 15, 20, 25, 30, 35, 40]
+
+vshl r2, r0, #1               ; SHL by 1: [20, 40, 60, 80, 100, 120, 140, 160]
+vstore.f32 [r11+#608], r2
+
+vshr r3, r0, #1               ; SHR by 1: [5, 10, 15, 20, 25, 30, 35, 40]
+vstore.f32 [r11+#640], r3
+
+vsar r4, r0, #1               ; SAR by 1: [5, 10, 15, 20, 25, 30, 35, 40] (unsigned)
+vstore.f32 [r11+#672], r4
+
+; ===== INTEGER MIN/MAX/ABS/NEG (offset 704) =====
+vmin.i32 r5, r0, r1
+vstore.f32 [r11+#704], r5
+
+vmax.i32 r6, r0, r1
+vstore.f32 [r11+#736], r6
+
+vabs.i32 r7, r0
+vstore.f32 [r11+#768], r7
+
+vneg.i32 r8, r0
+vstore.f32 [r11+#800], r8
+
+; ===== INTEGER COMPARISONS (offset 832) =====
+vcmplt.i32 r2, r0, r1
+vstore.f32 [r11+#832], r2
+
+vcmpgt.i32 r3, r0, r1
+vstore.f32 [r11+#864], r3
+
+vcmpeq.i32 r4, r0, r0         ; compare with self
+vstore.f32 [r11+#896], r4
+
+; ===== FMA (offset 928) =====
+vload.f32 r0, [r10]           ; [1.0, 2.0, 3.0, 4.0, ...]
+vload.f32 r1, [r10+#32]       ; [0.5, 1.0, 1.5, 2.0, ...]
+vload.f32 r2, [r10+#64]       ; [4.0, 9.0, 16.0, 25.0, ...]
+
+; FMA: r0 * r1 + r2 = [4.5, 11.0, 20.5, 33.0, ...]
+vfma.f32 r3, r0, r1, r2
+vstore.f32 [r11+#928], r3
+
+; ===== SPECIAL OPS (offset 960) =====
+vzero r4
+vstore.f32 [r11+#960], r4     ; all zeros
+
+vload.f32 r5, [r10]
+vmov r6, r5
+vstore.f32 [r11+#992], r6     ; copy of input
+
+vbroadcast r7, r5             ; broadcast first element
+vstore.f32 [r11+#1024], r7
+
+; ===== CONVERSIONS (offset 1056) =====
+vload.f32 r0, [r10]           ; [1.0, 2.0, 3.0, 4.0, ...]
+vcvt.f32.i32 r2, r0           ; convert float to int
+vstore.f32 [r11+#1056], r2
+
+vcvt.i32.f32 r3, r2           ; convert int back to float
+vstore.f32 [r11+#1088], r3
+
+; ===== F64 OPERATIONS (offset 1120) =====
+vload.f64 r0, [r10+#192]      ; [1.0, 2.0, 3.0, 4.0] as f64
+vload.f64 r1, [r10+#224]      ; [0.5, 1.0, 1.5, 2.0] as f64
+
+vadd.f64 r2, r0, r1
+vstore.f32 [r11+#1120], r2
+
+vsub.f64 r3, r0, r1
+vstore.f32 [r11+#1152], r3
+
+vmul.f64 r4, r0, r1
+vstore.f32 [r11+#1184], r4
+
+vdiv.f64 r5, r0, r1
+vstore.f32 [r11+#1216], r5
+
+vsqrt.f64 r6, r0
+vstore.f32 [r11+#1248], r6
+
+; ===== I16 OPERATIONS (offset 1280) =====
+vload.f32 r0, [r10+#256]      ; 16-bit integers packed
+vload.f32 r1, [r10+#288]
+
+vadd.i16 r2, r0, r1
+vstore.f32 [r11+#1280], r2
+
+vsub.i16 r3, r0, r1
+vstore.f32 [r11+#1312], r3
+
+vmul.i16 r4, r0, r1
+vstore.f32 [r11+#1344], r4
+
+; ===== HORIZONTAL OPS (offset 1376) =====
+vload.f32 r0, [r10]           ; [1.0, 2.0, 3.0, 4.0, ...]
+
+vhadd r2, r0                  ; horizontal add
+vstore.f32 [r11+#1376], r2
+
+vhmin r3, r0                  ; horizontal min
+vstore.f32 [r11+#1408], r3
+
+vhmax r4, r0                  ; horizontal max
+vstore.f32 [r11+#1440], r4
+
+; ===== RSQRT and RCP (offset 1472) =====
+vload.f32 r0, [r10+#64]       ; [4.0, 9.0, 16.0, 25.0, ...]
+
+vrsqrt r5, r0                 ; 1/sqrt(x) ≈ [0.5, 0.33, 0.25, 0.2, ...]
+vstore.f32 [r11+#1472], r5
+
+vrcp r6, r0                   ; 1/x ≈ [0.25, 0.11, 0.0625, 0.04, ...]
+vstore.f32 [r11+#1504], r6
+
+; ===== SHUFFLE (offset 1536) =====
+vload.f32 r0, [r10]
+vload.f32 r1, [r10+#32]
+
+vshuffle r2, r0, r1, #0x1B    ; shuffle with immediate
+vstore.f32 [r11+#1536], r2
+
+vmov r3, r0                   ; simple copy for slot 1568
+vstore.f32 [r11+#1568], r3
+
+; ===== BROADCAST (offset 1600) =====
+vload.f32 r0, [r10]
+vbroadcast r4, r0             ; broadcast first element
+vstore.f32 [r11+#1600], r4
+
+vload.f32 r0, [r10+#128]      ; load integer data
+vmov r5, r0
+vstore.f32 [r11+#1632], r5
+
+; ===== SETONE (offset 1664) =====
+vone r6                       ; all bits set to 1
+vstore.f32 [r11+#1664], r6
+
+; ===== NOP (verify it works) =====
+nop
+
+; Done
+ret

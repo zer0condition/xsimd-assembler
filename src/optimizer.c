@@ -82,9 +82,16 @@ static void eliminate_dead_code(pva_module_t* mod) {
     
     for (size_t i = 0; i < mod->size; i++) {
         int is_dead = 0;
+        pva_opcode_t op = mod->code[i].op;
         
-        // STORE and LOAD always keep (side effects)
-        if (mod->code[i].op != PVA_STORE_F32 && mod->code[i].op != PVA_LOAD_F32) {
+        // Keep control flow, memory ops, and side-effect instructions
+        int has_side_effect = (op == PVA_STORE_F32 || op == PVA_STORE_F64 || op == PVA_STORE_I32 ||
+                               op == PVA_LOAD_F32 || op == PVA_LOAD_F64 || op == PVA_LOAD_I32 ||
+                               op == PVA_RET || op == PVA_CALL || op == PVA_JMP || op == PVA_JMP_IF ||
+                               op == PVA_LABEL || op == PVA_LOOP_BEGIN || op == PVA_LOOP_END ||
+                               op == PVA_SCATTER_F32 || op == PVA_GATHER_F32);
+        
+        if (!has_side_effect) {
             if (mod->code[i].dst < 32 && !reg_used[mod->code[i].dst]) {
                 is_dead = 1;
                 removed++;

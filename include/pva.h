@@ -90,7 +90,8 @@ typedef enum {
     PVA_LOOP_BEGIN, PVA_LOOP_END,       // Loop markers
     PVA_CALL, PVA_RET,                  // Function call/return
 
-    PVA_NOP
+    PVA_NOP,
+    PVA_UNKNOWN                          // Unknown/invalid opcode
 } pva_opcode_t;
 
 // Data type for instruction operands

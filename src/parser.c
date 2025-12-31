@@ -37,6 +37,7 @@ static char* lexer_read_token(pva_lexer_t *lex, char *buffer, int max_len) {
            lex->input[lex->pos] != ',' &&
            lex->input[lex->pos] != '[' &&
            lex->input[lex->pos] != ']' &&
+           lex->input[lex->pos] != '+' &&
            lex->input[lex->pos] != '#' &&
            lex->input[lex->pos] != ';') {
         buffer[i++] = lex->input[lex->pos++];
@@ -215,28 +216,31 @@ static pva_opcode_t map_opcode(const char *opname) {
     if (strcmp(opname, "loop_begin") == 0) return PVA_LOOP_BEGIN;
     if (strcmp(opname, "loop_end") == 0) return PVA_LOOP_END;
     if (strcmp(opname, "call") == 0) return PVA_CALL;
-    if (strcmp(opname, "ret") == 0) return PVA_RET;
+    if (strcmp(opname, "ret") == 0 || strcmp(opname, "vret") == 0) return PVA_RET;
     
     // explicit nop
-    if (strcmp(opname, "nop") == 0) return PVA_NOP;
+    if (strcmp(opname, "nop") == 0 || strcmp(opname, "vnop") == 0) return PVA_NOP;
     
-    return PVA_NOP;  // unknown opcode
+    return PVA_UNKNOWN;  // truly unknown opcode
 }
 
 static pva_instr_t parse_instruction_line(pva_lexer_t *lex, int line_num) {
     pva_instr_t instr = {0};
-    instr.op = PVA_NOP;
+    instr.op = PVA_UNKNOWN;
     instr.mask_reg = -1;
 
     char opname[32];
     lexer_read_token(lex, opname, sizeof(opname));
     
-    if (strlen(opname) == 0) return instr;
+    if (strlen(opname) == 0) {
+        instr.op = PVA_NOP;  // Empty line is OK
+        return instr;
+    }
     
     pva_opcode_t op = map_opcode(opname);
-    if (op == PVA_NOP) {
+    if (op == PVA_UNKNOWN) {
         fprintf(stderr, "[parser] line %d: unknown opcode '%s'\n", line_num, opname);
-        return instr;
+        return instr;  // instr.op is already PVA_UNKNOWN
     }
 
     instr.op = op;
@@ -412,15 +416,14 @@ static pva_instr_t parse_instruction_line(pva_lexer_t *lex, int line_num) {
             break;
         }
 
-        // memory operations
-        case PVA_LOAD_F32: case PVA_LOAD_F64: case PVA_LOAD_I32:
-        case PVA_STORE_F32: case PVA_STORE_F64: case PVA_STORE_I32: {
-            int reg = lexer_read_register(lex);
-            if (reg < 0) {
-                fprintf(stderr, "[parser] line %d: expected register\n", line_num);
+        // load operations: dst, [base+offset]
+        case PVA_LOAD_F32: case PVA_LOAD_F64: case PVA_LOAD_I32: {
+            int dst = lexer_read_register(lex);
+            if (dst < 0) {
+                fprintf(stderr, "[parser] line %d: expected register for destination\n", line_num);
                 return instr;
             }
-            instr.dst = reg;
+            instr.dst = dst;
             
             if (lexer_peek(lex) == ',') lex->pos++;
             if (lexer_peek(lex) == '[') lex->pos++;
@@ -446,6 +449,46 @@ static pva_instr_t parse_instruction_line(pva_lexer_t *lex, int line_num) {
                 lex->pos++;
             }
             if (lex->input[lex->pos] == ']') lex->pos++;
+            break;
+        }
+
+        // store operations: [base+offset], src
+        case PVA_STORE_F32: case PVA_STORE_F64: case PVA_STORE_I32: {
+            // parse memory operand first: [base+offset]
+            if (lexer_peek(lex) == '[') lex->pos++;
+            
+            int base = lexer_read_register(lex);
+            if (base < 0) {
+                fprintf(stderr, "[parser] line %d: expected base register in memory operand\n", line_num);
+                return instr;
+            }
+            instr.dst = base;  // use dst for base address register
+            
+            // check for offset: +offset or +#imm
+            lexer_skip_whitespace(lex);
+            if (lex->input[lex->pos] == '+') {
+                lex->pos++;
+                uint32_t offset;
+                if (lexer_read_immediate(lex, &offset) == 0) {
+                    instr.imm = offset;
+                }
+            }
+            
+            // skip to ]
+            while (lex->input[lex->pos] && lex->input[lex->pos] != ']') {
+                lex->pos++;
+            }
+            if (lex->input[lex->pos] == ']') lex->pos++;
+            
+            if (lexer_peek(lex) == ',') lex->pos++;
+            
+            // now read the source register
+            int src = lexer_read_register(lex);
+            if (src < 0) {
+                fprintf(stderr, "[parser] line %d: expected source register\n", line_num);
+                return instr;
+            }
+            instr.src1 = src;
             break;
         }
 
@@ -619,7 +662,7 @@ pva_module_t* pva_parse_file(const char* filename) {
         // parse instruction
         pva_instr_t instr = parse_instruction_line(&lex, lex.line);
         
-        if (instr.op == PVA_NOP) {
+        if (instr.op == PVA_UNKNOWN) {
             errors++;
             // Skip to next line
             while (lex.input[lex.pos] && lex.input[lex.pos] != '\n') {
