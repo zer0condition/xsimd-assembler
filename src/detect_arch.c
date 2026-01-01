@@ -1,7 +1,9 @@
 #include "pva.h"
-#include <cpuid.h>
 #include <string.h>
 #include <stdio.h>
+
+#ifdef __x86_64__
+#include <cpuid.h>
 
 // XCR0 feature bits for OS-enabled AVX state saving
 #define XCR0_SSE_BIT    (1 << 1)  // SSE state (XMM registers)
@@ -20,11 +22,11 @@ static inline unsigned long long xgetbv(unsigned int xcr) {
     );
     return ((unsigned long long)edx << 32) | eax;
 }
+#endif
 
 pva_arch_t pva_detect_arch(int* vec_width_bytes) {
-    unsigned int eax, ebx, ecx, edx;
-
 #ifdef __x86_64__
+    unsigned int eax, ebx, ecx, edx;
     if (__get_cpuid_max(0, NULL) < 1) {
         *vec_width_bytes = 4;
         return PVA_ARCH_UNKNOWN;

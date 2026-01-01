@@ -6,9 +6,27 @@
 int main(int argc, char** argv) {
     if (argc < 4 || strcmp(argv[2], "-o") != 0) {
         fprintf(stderr, "xsimd-asm - cross-platform SIMD assembler\n\n");
-        fprintf(stderr, "usage: %s input.pva -o output.bin\n", argv[0]);
-        fprintf(stderr, "example: %s examples/mandelbrot.pva -o mandelbrot.bin\n", argv[0]);
+        fprintf(stderr, "usage: %s input.pva -o output.bin [options]\n", argv[0]);
+        fprintf(stderr, "options:\n");
+        fprintf(stderr, "  --force-avx512   Force AVX-512 mode (for testing)\n");
+        fprintf(stderr, "  --force-avx2     Force AVX2 mode\n");
+        fprintf(stderr, "  --force-sse      Force SSE mode\n");
+        fprintf(stderr, "\nexample: %s examples/mandelbrot.pva -o mandelbrot.bin\n", argv[0]);
         return 1;
+    }
+
+    // Parse command-line options
+    int force_avx512 = 0;
+    int force_avx2 = 0;
+    int force_sse = 0;
+    for (int i = 4; i < argc; i++) {
+        if (strcmp(argv[i], "--force-avx512") == 0) {
+            force_avx512 = 1;
+        } else if (strcmp(argv[i], "--force-avx2") == 0) {
+            force_avx2 = 1;
+        } else if (strcmp(argv[i], "--force-sse") == 0) {
+            force_sse = 1;
+        }
     }
 
     printf("[xsimd-asm] parsing: %s\n", argv[1]);
@@ -25,6 +43,22 @@ int main(int argc, char** argv) {
     // check support
     int vec_width = 0;
     mod->arch = pva_detect_arch(&vec_width);
+    
+    // Override detection if force flags are set
+    if (force_avx512) {
+        mod->arch = PVA_ARCH_X86_AVX512;
+        vec_width = 64;
+        printf("[xsimd-asm] forcing AVX-512 mode\n");
+    } else if (force_avx2) {
+        mod->arch = PVA_ARCH_X86_AVX2;
+        vec_width = 32;
+        printf("[xsimd-asm] forcing AVX2 mode\n");
+    } else if (force_sse) {
+        mod->arch = PVA_ARCH_X86_SSE;
+        vec_width = 16;
+        printf("[xsimd-asm] forcing SSE mode\n");
+    }
+    
     mod->vec_width_bytes = vec_width;
 
     printf("CPU architecture:\n");
